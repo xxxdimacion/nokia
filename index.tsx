@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 
 // --- Types ---
@@ -63,9 +63,47 @@ const playClickSound = () => {
     osc.start();
     osc.stop(ctx.currentTime + 0.1);
   } catch (e) {
-    // Ignore audio errors (e.g. if user hasn't interacted yet)
+    // Ignore audio errors
     console.error(e);
   }
+};
+
+const playJumpSound = () => {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(200, ctx.currentTime);
+    osc.frequency.linearRampToValueAtTime(400, ctx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.05, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.1);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.1);
+  } catch (e) {}
+};
+
+const playDieSound = () => {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(300, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.3);
+    gain.gain.setValueAtTime(0.05, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.3);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.3);
+  } catch (e) {}
 };
 
 // --- Styles ---
@@ -115,9 +153,10 @@ const Styles = () => (
       display: flex;
       flex-direction: column;
       align-items: center;
+      user-select: none; /* Prevent selection while clicking rapidly */
     }
 
-    /* Faceplate Accent (The grey area around the screen on original 3310) */
+    /* Faceplate Accent */
     .faceplate-accent {
       width: 110%;
       height: 280px;
@@ -179,6 +218,15 @@ const Styles = () => (
       border-bottom: 2px solid var(--nokia-fg);
       padding-bottom: 5px;
       letter-spacing: 1px;
+    }
+    
+    .large-text-no-border {
+      font-size: 14px;
+      text-transform: uppercase;
+      text-align: center;
+      margin: 0 0 15px 0;
+      letter-spacing: 1px;
+      font-weight: bold;
     }
 
     p {
@@ -491,12 +539,11 @@ const SubscriptionGate = ({ onSubscribe }: { onSubscribe: () => void }) => {
       flexDirection: 'column', 
       height: '100%', 
       alignItems: 'center',
-      paddingTop: '20px'
+      justifyContent: 'center', // Centered Vertically
+      paddingBottom: '20px'
     }}>
-      <h1 style={{ marginBottom: '5px' }}>ВНИМАНИЕ</h1>
-      <p style={{ margin: '0 0 10px 0' }}>ДОСТУП ЗАКРЫТ</p>
+      <div className="large-text-no-border">ДОСТУП ЗАКРЫТ</div>
       
-      {/* Replaced exclamation mark with the subscription button */}
       <a 
         href={TELEGRAM_CHANNEL_URL} 
         target="_blank" 
@@ -544,10 +591,174 @@ const GuideMenu = () => {
   );
 };
 
+// --- Mario Mini Game ---
+
+const MarioGame: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [score, setScore] = useState(0);
+  const [gameOver, setGameOver] = useState(false);
+  const requestRef = useRef<number>();
+  const gameState = useRef({
+    playerY: 100,
+    playerVy: 0,
+    isJumping: false,
+    obstacles: [] as { x: number, h: number }[],
+    frameCount: 0
+  });
+
+  // Game Constants
+  const GRAVITY = 0.6;
+  const JUMP_FORCE = -8;
+  const GROUND_Y = 130;
+  const PLAYER_X = 30;
+  const PLAYER_SIZE = 12;
+  const SPEED = 3;
+
+  const jump = () => {
+    if (!gameState.current.isJumping && !gameOver) {
+      playJumpSound();
+      gameState.current.playerVy = JUMP_FORCE;
+      gameState.current.isJumping = true;
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space') jump();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    
+    // Expose jump globally for the Navi button
+    (window as any).marioJump = jump;
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      delete (window as any).marioJump;
+    };
+  }, [gameOver]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Reset State
+    gameState.current = {
+      playerY: GROUND_Y - PLAYER_SIZE,
+      playerVy: 0,
+      isJumping: false,
+      obstacles: [],
+      frameCount: 0
+    };
+    setScore(0);
+    setGameOver(false);
+
+    const update = () => {
+      if (gameOver) return;
+
+      const state = gameState.current;
+      state.frameCount++;
+
+      // Physics
+      state.playerVy += GRAVITY;
+      state.playerY += state.playerVy;
+
+      // Ground Collision
+      if (state.playerY > GROUND_Y - PLAYER_SIZE) {
+        state.playerY = GROUND_Y - PLAYER_SIZE;
+        state.playerVy = 0;
+        state.isJumping = false;
+      }
+
+      // Spawn Obstacles
+      if (state.frameCount % 90 === 0) {
+        state.obstacles.push({ x: canvas.width, h: 15 + Math.random() * 20 });
+      }
+
+      // Update Obstacles
+      for (let i = state.obstacles.length - 1; i >= 0; i--) {
+        state.obstacles[i].x -= SPEED;
+        
+        // Collision
+        const obs = state.obstacles[i];
+        if (
+          PLAYER_X < obs.x + 10 &&
+          PLAYER_X + PLAYER_SIZE > obs.x &&
+          state.playerY < GROUND_Y &&
+          state.playerY + PLAYER_SIZE > GROUND_Y - obs.h
+        ) {
+           playDieSound();
+           setGameOver(true);
+           cancelAnimationFrame(requestRef.current!);
+           return;
+        }
+
+        // Remove offscreen
+        if (obs.x < -20) {
+          state.obstacles.splice(i, 1);
+          setScore(s => s + 1);
+        }
+      }
+
+      // Render
+      ctx.fillStyle = '#43523d'; // Bg
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = '#c7f0d8'; // Fg
+      
+      // Ground
+      ctx.fillRect(0, GROUND_Y, canvas.width, 2);
+
+      // Player (Pixel Mario)
+      ctx.fillRect(PLAYER_X, state.playerY, PLAYER_SIZE, PLAYER_SIZE);
+      
+      // Obstacles
+      state.obstacles.forEach(obs => {
+        ctx.fillRect(obs.x, GROUND_Y - obs.h, 10, obs.h);
+      });
+
+      // Score
+      ctx.font = '10px "Press Start 2P"';
+      ctx.fillText(`SCORE: ${Math.floor(state.frameCount / 10)}`, 10, 20);
+
+      requestRef.current = requestAnimationFrame(update);
+    };
+
+    requestRef.current = requestAnimationFrame(update);
+
+    return () => cancelAnimationFrame(requestRef.current!);
+  }, [gameOver]);
+
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <canvas 
+        ref={canvasRef} 
+        width={260} 
+        height={150} 
+        style={{ width: '100%', height: '100%' }}
+      />
+      {gameOver && (
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          backgroundColor: 'rgba(67, 82, 61, 0.8)'
+        }}>
+          <div>GAME OVER</div>
+          <div style={{ marginTop: '10px', fontSize: '10px' }}>Press C to Restart</div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // --- Main App ---
 
 const App = () => {
   const [isSubscribed, setIsSubscribed] = useState(false);
+  const [showGame, setShowGame] = useState(false);
+  // We use a key to force re-mount of game on restart
+  const [gameKey, setGameKey] = useState(0);
 
   useEffect(() => {
     // Check local storage if needed
@@ -565,8 +776,27 @@ const App = () => {
   ];
 
   const handlePhysicalNaviClick = () => {
+    if (showGame) {
+      // Jump in game
+      if ((window as any).marioJump) (window as any).marioJump();
+    } else {
+      playClickSound();
+    }
+  };
+  
+  const handlePhysicalCClick = () => {
     playClickSound();
-    // Link logic removed as requested, button only makes sound
+    if (showGame) {
+        // If game over, restart, otherwise toggle off
+        // For simplicity, let's just toggle off if playing, or restart if gameover logic handled differently
+        // But user asked to activate by C. 
+        // Let's make toggle:
+        setShowGame(false);
+        // If we want to restart, we'd need to know game state, but let's simple toggle
+    } else {
+        setGameKey(p => p + 1);
+        setShowGame(true);
+    }
   };
 
   return (
@@ -580,11 +810,15 @@ const App = () => {
           <div className="lcd-display">
             <div className="pixel-overlay"></div>
             <StatusBar />
-            <div style={{ padding: '5px', flex: 1, overflow: 'hidden' }}>
-              {!isSubscribed ? (
-                <SubscriptionGate onSubscribe={handleSubscribe} />
+            <div style={{ padding: '5px', flex: 1, overflow: 'hidden', position: 'relative' }}>
+              {showGame ? (
+                <MarioGame onGameOver={() => {}} key={gameKey} />
               ) : (
-                <GuideMenu />
+                !isSubscribed ? (
+                  <SubscriptionGate onSubscribe={handleSubscribe} />
+                ) : (
+                  <GuideMenu />
+                )
               )}
             </div>
           </div>
@@ -593,7 +827,7 @@ const App = () => {
         {/* Physical Controls - Styled like 3310 */}
         <div className="control-panel">
           <div className="btn-c-wrapper">
-             <div className="btn-c" onClick={playClickSound}>C</div>
+             <div className="btn-c" onClick={handlePhysicalCClick}>C</div>
           </div>
           
           <div className="btn-navi" onClick={handlePhysicalNaviClick}>
