@@ -7,6 +7,7 @@ interface Guide {
   title: string;
   description: string;
   url: string;
+  code?: string; // If present, requires unlock
 }
 
 // --- Data ---
@@ -14,26 +15,29 @@ const GUIDES: Guide[] = [
   {
     id: 1,
     title: "СТАРТ НОВИЧКА",
-    description: "Основы игры",
+    description: "Основы трафика",
     url: "#guide1",
   },
   {
     id: 2,
-    title: "ТАКТИКИ",
-    description: "Секреты про",
+    title: "TIKTOK ADS",
+    description: "Секреты TikTok ADS",
     url: "#guide2",
+    code: "3x2",
   },
   {
     id: 3,
-    title: "ФАРМ",
-    description: "Где искать",
+    title: "ОРГАНИКА 2.0",
+    description: "УБТ трафик с 0",
     url: "#guide3",
+    code: "3x3",
   },
   {
     id: 4,
-    title: "БОССЫ",
-    description: "Разбор механик",
+    title: "МАСШТАБ",
+    description: "Как выйти на 100к/мес",
     url: "#guide4",
+    code: "3x4",
   },
 ];
 
@@ -106,6 +110,48 @@ const playDieSound = () => {
   } catch (e) {}
 };
 
+const playUnlockSound = () => {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    
+    // Success jingle
+    const now = ctx.currentTime;
+    [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.05, now + i * 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.1 + 0.1);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + i * 0.1);
+        osc.stop(now + i * 0.1 + 0.1);
+    });
+  } catch(e) {}
+}
+
+const playErrorSound = () => {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(150, ctx.currentTime);
+    osc.frequency.linearRampToValueAtTime(100, ctx.currentTime + 0.2);
+    gain.gain.setValueAtTime(0.05, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.2);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.2);
+  } catch (e) {}
+};
+
 // --- Styles ---
 
 const Styles = () => (
@@ -141,7 +187,7 @@ const Styles = () => (
     /* Phone Casing */
     .nokia-case {
       background-color: var(--nokia-case);
-      padding: 40px 20px 50px 20px;
+      padding: 30px 20px 50px 20px;
       border-radius: 40px 40px 60px 60px;
       box-shadow: 
         inset 5px 5px 15px rgba(255,255,255,0.1),
@@ -156,16 +202,29 @@ const Styles = () => (
       user-select: none; /* Prevent selection while clicking rapidly */
     }
 
-    /* Faceplate Accent */
-    .faceplate-accent {
-      width: 110%;
-      height: 280px;
-      position: absolute;
-      top: 30px;
-      border-radius: 30px 30px 50px 50px;
-      background: rgba(255,255,255,0.05);
-      pointer-events: none;
-      z-index: 0;
+    /* Earpiece / Speaker */
+    .earpiece {
+      width: 50px;
+      height: 12px;
+      background: rgba(0,0,0,0.25);
+      border-radius: 10px;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 5px;
+      box-shadow: inset 1px 1px 2px rgba(0,0,0,0.6);
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      position: relative;
+      z-index: 2;
+    }
+    
+    .earpiece-hole {
+      width: 4px;
+      height: 4px;
+      background-color: #1a2228;
+      border-radius: 50%;
+      box-shadow: inset 1px 1px 1px rgba(0,0,0,0.8);
     }
 
     /* The Screen Glass area */
@@ -224,7 +283,7 @@ const Styles = () => (
       font-size: 14px;
       text-transform: uppercase;
       text-align: center;
-      margin: 0 0 15px 0;
+      margin: 0 0 5px 0; /* Reduced bottom margin to 5px to match bottom text spacing */
       letter-spacing: 1px;
       font-weight: bold;
     }
@@ -271,12 +330,19 @@ const Styles = () => (
 
     .menu-item {
       display: flex;
-      flex-direction: column;
+      flex-direction: row; /* Changed to row for lock icon */
+      justify-content: space-between;
+      align-items: center;
       padding: 8px 4px;
       border: 2px solid transparent;
       color: var(--nokia-fg);
       text-decoration: none;
       cursor: pointer;
+    }
+    
+    .menu-content {
+      display: flex;
+      flex-direction: column;
     }
 
     .menu-item:hover {
@@ -349,6 +415,34 @@ const Styles = () => (
       margin-bottom: 10px;
       text-align: center;
       opacity: 0.7;
+    }
+    
+    /* Unlock Screen */
+    .unlock-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      width: 100%;
+    }
+    
+    .code-input {
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid var(--nokia-fg);
+      color: var(--nokia-fg);
+      font-family: 'Press Start 2P', monospace;
+      font-size: 12px;
+      width: 80%;
+      text-align: center;
+      margin: 10px 0;
+      padding: 5px;
+      outline: none;
+    }
+    
+    .code-input::placeholder {
+      color: rgba(199, 240, 216, 0.4);
     }
 
     /* --- PHYSICAL BUTTONS STYLING --- */
@@ -493,11 +587,16 @@ const Styles = () => (
     ::-webkit-scrollbar-thumb {
       background: var(--nokia-fg); 
     }
-
   `}</style>
 );
 
 // --- Components ---
+
+const LockIcon = () => (
+  <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" style={{ marginLeft: '5px' }}>
+    <path d="M3 3 V2 A2 2 0 0 1 7 2 V3 H8 V9 H2 V3 H3 Z M4 3 H6 V2 A1 1 0 0 0 4 2 V3 Z" />
+  </svg>
+);
 
 const StatusBar = () => {
   const [time, setTime] = useState("12:00");
@@ -539,8 +638,7 @@ const SubscriptionGate = ({ onSubscribe }: { onSubscribe: () => void }) => {
       flexDirection: 'column', 
       height: '100%', 
       alignItems: 'center',
-      justifyContent: 'center', // Centered Vertically
-      paddingBottom: '20px'
+      justifyContent: 'center', 
     }}>
       <div className="large-text-no-border">ДОСТУП ЗАКРЫТ</div>
       
@@ -573,19 +671,109 @@ const SubscriptionGate = ({ onSubscribe }: { onSubscribe: () => void }) => {
   );
 };
 
+const UnlockScreen = ({ guide, onUnlock, onCancel }: { guide: Guide, onUnlock: () => void, onCancel: () => void }) => {
+  const [code, setCode] = useState("");
+  const [error, setError] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (inputRef.current) inputRef.current.focus();
+  }, []);
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    // Allow both 'x' (latin) and 'х' (cyrillic) for convenience
+    const normalize = (s: string) => s.toLowerCase().replace('х', 'x');
+    
+    if (guide.code && normalize(code) === normalize(guide.code)) {
+      playUnlockSound();
+      onUnlock();
+    } else {
+      playErrorSound();
+      setError(true);
+      setCode("");
+      setTimeout(() => setError(false), 1500);
+    }
+  };
+
+  return (
+    <div className="unlock-screen">
+      <div style={{ marginBottom: '10px', textAlign: 'center' }}>
+        {error ? "НЕВЕРНО!" : "ВВЕДИТЕ КОД:"}
+      </div>
+      <form onSubmit={handleSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <input
+          ref={inputRef}
+          type="text"
+          className="code-input"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          maxLength={10}
+        />
+        <div style={{ display: 'flex', gap: '5px', width: '90%', marginTop: '10px' }}>
+          <button type="submit" className="btn" onClick={() => playClickSound()} style={{ flex: 1 }}>OK</button>
+          <button type="button" className="btn" onClick={() => { playClickSound(); onCancel(); }} style={{ flex: 1 }}>НАЗАД</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 const GuideMenu = () => {
+  const [unlockedIds, setUnlockedIds] = useState<number[]>([]);
+  const [unlockTarget, setUnlockTarget] = useState<Guide | null>(null);
+
+  const handleGuideClick = (guide: Guide, e: React.MouseEvent) => {
+    e.preventDefault();
+    playClickSound();
+
+    if (!guide.code || unlockedIds.includes(guide.id)) {
+      // Open link
+      window.location.href = guide.url;
+    } else {
+      // Show unlock screen
+      setUnlockTarget(guide);
+    }
+  };
+
+  const handleUnlockSuccess = () => {
+    if (unlockTarget) {
+      setUnlockedIds([...unlockedIds, unlockTarget.id]);
+      window.location.href = unlockTarget.url;
+      setUnlockTarget(null);
+    }
+  };
+
+  if (unlockTarget) {
+    return <UnlockScreen 
+      guide={unlockTarget} 
+      onUnlock={handleUnlockSuccess} 
+      onCancel={() => setUnlockTarget(null)} 
+    />;
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ textAlign: 'center', marginBottom: '5px' }}>
         МЕНЮ
       </div>
       <div className="menu-list">
-        {GUIDES.map((guide) => (
-          <a key={guide.id} href={guide.url} className="menu-item" onClick={playClickSound}>
-            <span className="menu-title">{guide.id}. {guide.title}</span>
-            <span className="menu-desc">{guide.description}</span>
-          </a>
-        ))}
+        {GUIDES.map((guide) => {
+          const isLocked = guide.code && !unlockedIds.includes(guide.id);
+          return (
+            <div 
+              key={guide.id} 
+              className="menu-item" 
+              onClick={(e) => handleGuideClick(guide, e)}
+            >
+              <div className="menu-content">
+                <span className="menu-title">{guide.id}. {guide.title}</span>
+                <span className="menu-desc">{guide.description}</span>
+              </div>
+              {isLocked && <LockIcon />}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -757,12 +945,7 @@ const MarioGame: React.FC<{ onGameOver: () => void }> = ({ onGameOver }) => {
 const App = () => {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [showGame, setShowGame] = useState(false);
-  // We use a key to force re-mount of game on restart
   const [gameKey, setGameKey] = useState(0);
-
-  useEffect(() => {
-    // Check local storage if needed
-  }, []);
 
   const handleSubscribe = () => {
     setIsSubscribed(true);
@@ -777,7 +960,6 @@ const App = () => {
 
   const handlePhysicalNaviClick = () => {
     if (showGame) {
-      // Jump in game
       if ((window as any).marioJump) (window as any).marioJump();
     } else {
       playClickSound();
@@ -786,13 +968,9 @@ const App = () => {
   
   const handlePhysicalCClick = () => {
     playClickSound();
+    
     if (showGame) {
-        // If game over, restart, otherwise toggle off
-        // For simplicity, let's just toggle off if playing, or restart if gameover logic handled differently
-        // But user asked to activate by C. 
-        // Let's make toggle:
         setShowGame(false);
-        // If we want to restart, we'd need to know game state, but let's simple toggle
     } else {
         setGameKey(p => p + 1);
         setShowGame(true);
@@ -803,13 +981,22 @@ const App = () => {
     <>
       <Styles />
       <div className="nokia-case">
-        <div className="faceplate-accent"></div>
+        
+        {/* Speaker Grill */}
+        <div className="earpiece">
+          <div className="earpiece-hole"></div>
+          <div className="earpiece-hole"></div>
+          <div className="earpiece-hole"></div>
+          <div className="earpiece-hole"></div>
+        </div>
+
         <div className="nokia-logo">NOKIA</div>
         
         <div className="screen-glass">
           <div className="lcd-display">
             <div className="pixel-overlay"></div>
             <StatusBar />
+            
             <div style={{ padding: '5px', flex: 1, overflow: 'hidden', position: 'relative' }}>
               {showGame ? (
                 <MarioGame onGameOver={() => {}} key={gameKey} />
